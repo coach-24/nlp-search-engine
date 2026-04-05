@@ -1,0 +1,35 @@
+[
+  {
+    "id": "ch03-ngram-lm",
+    "title": "N-gram Language Models",
+    "chapter": "Language Modeling",
+    "topic": "N-grams",
+    "difficulty": "Beginner",
+    "task": "Language Modeling",
+    "content": "N-gram language models estimate the probability of a token using a fixed context window and are foundational for perplexity-based evaluation.",
+    "snippet": "N-gram language models estimate the probability of the next token from a fixed context window.",
+    "tags": ["Probability", "N-grams", "Perplexity", "Language Models"]
+  },
+  {
+    "id": "ch08-hmm-tagging",
+    "title": "Hidden Markov Models for POS Tagging",
+    "chapter": "Sequence Models",
+    "topic": "HMM",
+    "difficulty": "Intermediate",
+    "task": "Sequence Labeling",
+    "content": "Hidden Markov Models are generative probabilistic models widely used for part-of-speech tagging and other sequence labeling problems.",
+    "snippet": "HMMs are classical sequence models for tagging and decoding with Viterbi.",
+    "tags": ["HMM", "Viterbi", "Probability", "POS Tagging"]
+  },
+  {
+    "id": "ch12-cky-parsing",
+    "title": "CKY Parsing",
+    "chapter": "Syntax",
+    "topic": "Parsing",
+    "difficulty": "Advanced",
+    "task": "Parsing",
+    "content": "CKY is a dynamic programming algorithm for constituency parsing under context-free grammars in Chomsky Normal Form.",
+    "snippet": "CKY uses chart parsing and dynamic programming for syntax trees.",
+    "tags": ["Parsing", "Dynamic Programming", "Syntax", "Context-Free Grammar"]
+  }
+]
