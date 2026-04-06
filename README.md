@@ -1,80 +1,162 @@
 # NLP Search Engine
 
-A full-stack NLP search experience built with:
+A state-of-the-art, full-stack Natural Language Processing (NLP) search engine platform. Built for powerful full-text and semantic document retrieval with deep AI integrations for explainability and insights.
 
-- `frontend`: React + Vite + Tailwind CSS + Framer Motion
-- `backend`: FastAPI
-- `search`: Elasticsearch
+## 🚀 Features
 
-## Project Structure
+- **Blazing Fast Search**: Powered by **Elasticsearch**, enabling complex boolean queries, fuzzy matching, and robust full-text search capabilities.
+- **Semantic Search**: Integrated with `sentence-transformers` (`all-MiniLM-L6-v2`) to find meaning and intent behind queries, not just keyword matches.
+- **Generative AI Insights**: Deep LLM integration (supports **Ollama, OpenAI, Gemini**) to generate contextual insights, summarize results, and explain document matches.
+- **PDF Data Pipeline**: Built-in Python scripts to automatically parse, chunk, and securely ingest complex PDF textbooks or documents into Elasticsearch.
+- **Modern UI/UX**: A highly responsive, animated frontend built using **React 19**, **Vite**, **Tailwind CSS**, and **Framer Motion**. 
+- **Robust API Backend**: High-performance **FastAPI** backend with asynchronous routes and scalable architecture.
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **Framework**: React 19 + Vite
+- **Styling**: Tailwind CSS
+- **Animations**: Framer Motion
+- **Icons**: React Icons
+- **Routing**: React Router DOM v7
+
+### Backend
+- **Framework**: Python 3.9+ & FastAPI
+- **Search Engine**: Elasticsearch 9.3.x (with 8.x Python Client)
+- **Machine Learning**: SentenceTransformers 
+- **LLM Integration**: HTTPX-based asynchronous clients for Ollama, OpenAI, and Google Gemini
+- **Data Validation**: Pydantic
+
+---
+
+## 📂 Project Structure
 
 ```text
 nlp-search-engine/
-  backend/
-  frontend/
+├── backend/
+│   ├── build_dataset.py     # Script to parse and extract chunks from PDFs
+│   ├── ingest.py            # Pipelines to setup Elasticsearch indices & load data
+│   ├── main.py              # FastAPI application entry point
+│   ├── data/                # Processed JSON output files
+│   ├── models/              # Pydantic schema models
+│   ├── routers/             # API route definitions
+│   ├── services/            # Core business logic (LLM, Elastic search, NLP)
+│   └── utils/               # Helper utilities
+└── frontend/
+    ├── src/
+    │   ├── components/      # Reusable React components (Search bars, Result Cards, AI Modals)
+    │   ├── hooks/           # Custom React hooks (e.g., useExplain)
+    │   ├── pages/           # Route pages (Home, Results)
+    │   └── App.jsx          # Root component
+    ├── package.json         # Node.js dependencies
+    └── tailwind.config.js   # Tailwind rules & theming
 ```
 
-## Local Setup
+---
 
-### 1. Backend
+## ⚙️ Getting Started
 
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-uvicorn main:app --reload
-```
+### Prerequisites
+- [Node.js](https://nodejs.org/en/) (v18+)
+- [Python](https://www.python.org/) 3.9+
+- Elasticsearch Cluster (Local or Cloud)
+- *(Optional)* [Ollama](https://ollama.ai/) installed locally for local LLM features.
 
-### 2. Frontend
+---
 
-```bash
-cd frontend
-npm install
-copy .env.example .env
-npm run dev
-```
+### 1. Backend Setup
 
-## Environment Variables
+1. **Navigate to backend and setup Virtual Environment:**
+   ```bash
+   cd backend
+   python -m venv venv
+   # On Windows:
+   venv\Scripts\activate
+   # On Mac/Linux:
+   # source venv/bin/activate
+   ```
 
-### Backend
+2. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Use `backend/.env`:
+3. **Configure Environment Variables:**
+   ```bash
+   copy .env.example .env
+   ```
+   *Edit `.env` and configure your Elasticsearch credentials, URL, and preferred LLM provider (`ollama` | `openai` | `gemini`).*
 
-```env
-ES_HOST=http://localhost:9200
-ES_INDEX=nlp_textbook
-ES_USERNAME=
-ES_PASSWORD=
-ES_VERIFY_CERTS=true
-FRONTEND_URL=http://localhost:5173
-ENABLE_SEMANTIC_SEARCH=false
-SEMANTIC_MODEL=all-MiniLM-L6-v2
-```
+4. **Data Ingestion (Optional/First-Time Setup):**
+   If you have a customized `ed3book.pdf` or similar text dump, parse and index it:
+   ```bash
+   # Parse PDF into chunked JSON components
+   python build_dataset.py
+   # Push chunks into Elasticsearch index
+   python ingest.py --force
+   ```
 
-### Frontend
+5. **Start the FastAPI Server:**
+   ```bash
+   uvicorn main:app --reload
+   # The API will be available at http://localhost:8000
+   ```
 
-Use `frontend/.env`:
+---
 
-```env
-VITE_API_URL=http://localhost:8000/api
-```
+### 2. Frontend Setup
 
-## Deployment Notes
+1. **Navigate to the frontend directory:**
+   ```bash
+   cd frontend
+   ```
 
-- Do not commit `.env` files.
-- Do not commit `backend/venv/`, `__pycache__/`, or local PDFs.
-- Set deployment secrets through your hosting provider environment settings.
-- Point the frontend `VITE_API_URL` to your deployed FastAPI backend.
-- Point the backend Elasticsearch settings to your deployed Elasticsearch cluster.
+2. **Install node modules:**
+   ```bash
+   npm install
+   ```
 
-## Indexing Data
+3. **Configure Environment Variables:**
+   ```bash
+   copy .env.example .env
+   ```
+   *Make sure `VITE_API_URL` points to your active backend (e.g. `http://localhost:8000/api`).*
 
-If you need to recreate the Elasticsearch index:
+4. **Run the Development Server:**
+   ```bash
+   npm run dev
+   # Access the Web App at http://localhost:5173
+   ```
 
-```bash
-cd backend
-venv\Scripts\activate
-python ingest.py --force
-```
+---
+
+## 🔐 Environment Variables
+
+### Backend (`backend/.env`)
+| Variable | Description | Default / Example |
+| :--- | :--- | :--- |
+| `ES_HOST` | Elasticsearch Cluster URL | `http://localhost:9200` |
+| `ES_INDEX` | The Target ES Index | `nlp_textbook` |
+| `ES_USERNAME` | ES Basic Auth Username | |
+| `ES_PASSWORD` | ES Basic Auth Password | |
+| `ENABLE_SEMANTIC_SEARCH` | Toggle Vector/Semantic Mode | `false` |
+| `SEMANTIC_MODEL` | HuggingFace ST Model | `all-MiniLM-L6-v2` |
+| `LLM_PROVIDER` | `ollama`, `openai`, or `gemini` | `ollama` |
+| `LLM_MODEL` | Provider specific model | e.g., `llama3`, `gpt-4o-mini` |
+
+*Add API Keys for OpenAI (`OPENAI_API_KEY`) or Gemini (`GEMINI_API_KEY`) based on your active `LLM_PROVIDER`.*
+
+### Frontend (`frontend/.env`)
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `VITE_API_URL` | Base API Endpoint for FastAPI | `http://localhost:8000/api` |
+
+---
+
+## ⚠️ Important Deployment Notes
+- **DO NOT** commit your `.env` files to version control.
+- Ensure `backend/venv/` and `frontend/node_modules/` are included in your `.gitignore` files.
+- In production, set your environment secrets via your hosting provider's configuration panel (e.g., Vercel, Render, AWS, Heroku).
+- Verify CORS settings in `backend/main.py` if deploying the frontend and backend on different public domains.
