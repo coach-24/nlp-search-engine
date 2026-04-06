@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 def main():
     parser = argparse.ArgumentParser(description="NLP Search Engine — Ingestion")
     parser.add_argument("--pdf",   default=None,                 help="Extract this PDF before indexing")
-    parser.add_argument("--data",  default="data/textbook.json", help="Path to JSON dataset")
+    parser.add_argument("--data",  default=None,                  help="Path to JSON dataset")
     parser.add_argument("--force", action="store_true",          help="Delete and recreate ES index")
     parser.add_argument("--check", action="store_true",          help="Test ES connection only")
     args = parser.parse_args()
@@ -55,7 +55,7 @@ def main():
         print(f"  Documents: {count}\n")
         sys.exit(0)
 
-    data_path = Path(args.data)
+    data_path = Path(args.data) if args.data else Path(settings.dataset_path)
 
     # Step 2: Extract PDF if requested
     if args.pdf:
@@ -86,7 +86,7 @@ def main():
     print(f"\nDone!")
     print(f"  Indexed : {result['indexed']} documents")
     print(f"  Failed  : {result['failed']} documents")
-    print(f"\n  Verify: curl https://localhost:9200/{settings.es_index}/_count\n")
+    print(f"\n  Verify: curl http://localhost:9200/{settings.es_index}/_count\n")
 
 
 if __name__ == "__main__":

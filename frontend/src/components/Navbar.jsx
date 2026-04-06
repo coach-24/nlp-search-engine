@@ -1,6 +1,6 @@
 import { FaGithub } from "react-icons/fa";
-import { motion as Motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion as Motion } from "framer-motion";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 
 function LogoGlyph() {
   return (
@@ -17,32 +17,56 @@ function LogoGlyph() {
 
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isResultsPage = location.pathname.startsWith("/results") || location.pathname.startsWith("/document") || location.pathname.startsWith("/detail");
 
   return (
     <Motion.nav
       initial={{ opacity: 0, y: -18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: "easeOut" }}
-      className="fixed top-0 inset-x-0 z-50 border-b border-white/6 bg-[rgba(8,12,26,0.86)] backdrop-blur-2xl"
+      className="fixed top-0 inset-x-0 z-[100] h-[76px] border-b border-white/5 bg-[rgba(8,12,26,0.86)] backdrop-blur-xl"
     >
-      <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-3 text-left group min-w-0 transition-transform duration-200 hover:scale-[1.01]"
+      <div className="max-w-[1400px] h-full mx-auto px-6 flex items-center justify-between gap-4 w-full">
+        <Link
+          to="/"
+          aria-label="Go to home"
+          className="flex items-center gap-3 text-left group min-w-0 transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 rounded-xl rounded-l-2xl p-1 -ml-1 pr-3"
         >
           <LogoGlyph />
-          <div className="min-w-0">
-            <div className="font-semibold text-xl tracking-tight" style={{ fontFamily: "Sora, sans-serif" }}>
-              <span className="gradient-text">NLP</span>
-              <span className="text-slate-100 ml-1 group-hover:text-white transition-colors">Search</span>
+          <div className="min-w-0 hidden sm:block">
+            <div className="font-semibold text-xl tracking-tight transition-colors duration-200" style={{ fontFamily: "Sora, sans-serif" }}>
+              <span className="gradient-text group-hover:brightness-125 transition-all duration-200">NLP</span>
+              <span className="text-slate-100 ml-1 group-hover:text-white group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] transition-all duration-200">Search</span>
             </div>
-            <div className="text-xs text-slate-500 truncate group-hover:text-slate-400 transition-colors">
-              Premium semantic exploration for language technology
+            <div className="text-xs text-slate-500 truncate group-hover:text-indigo-200/70 transition-colors duration-200">
+              Premium semantic exploration
             </div>
           </div>
-        </button>
+        </Link>
 
         <div className="flex items-center gap-4">
+          <AnimatePresence>
+            {isResultsPage && (
+              <Motion.div 
+                initial={{ opacity: 0, scale: 0.95, x: 10 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.95, x: 10 }}
+                transition={{ duration: 0.2 }}
+                className="hidden sm:block"
+              >
+                <Link
+                  to="/"
+                  className="flex items-center gap-2 px-3 py-1.5 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-medium text-slate-300 hover:text-white transition-all duration-200 border border-white/5 hover:border-white/10"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  Home
+                </Link>
+              </Motion.div>
+            )}
+          </AnimatePresence>
           <span className="text-xs text-slate-500 font-mono-custom hidden md:block">
             Jurafsky & Manning
           </span>

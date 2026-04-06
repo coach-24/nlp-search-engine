@@ -1,111 +1,164 @@
 """
 elastic/index.py
-Creates and manages the Elasticsearch index with proper mappings.
-Run this once before ingesting data.
+Creates and manages the Elasticsearch index with modern ES 8.x APIs.
 """
+from copy import deepcopy
 import logging
+
 from elasticsearch import Elasticsearch
 
+from elastic.client import get_es_client
 from utils.config import settings
 from utils.text_processing import load_json_data, preprocess_document
 
 logger = logging.getLogger(__name__)
 
-# ── Index mapping ─────────────────────────────────────────────────────────────
+SYNONYM_RULES = [
+    "transformer, attention model, attention models",
+    "ner, named entity recognition",
+    "lm, language model, language models, language modelling",
+    "llm, large language model, large language models",
+    "pos, part of speech, part-of-speech, part-of-speech tagging",
+    "qa, question answering",
+    "ir, information retrieval",
+]
 
-INDEX_MAPPING = {
+BASE_INDEX_MAPPING = {
     "settings": {
         "number_of_shards": 1,
         "number_of_replicas": 0,
         "analysis": {
+            "filter": {
+                "english_stop": {
+                    "type": "stop",
+                    "stopwords": "_english_",
+                },
+                "english_stemmer": {
+                    "type": "stemmer",
+                    "language": "english",
+                },
+                "nlp_synonyms": {
+                    "type": "synonym_graph",
+                    "synonyms": SYNONYM_RULES,
+                },
+                "trigram_shingle": {
+                    "type": "shingle",
+                    "min_shingle_size": 2,
+                    "max_shingle_size": 3,
+                },
+            },
             "analyzer": {
                 "nlp_analyzer": {
                     "type": "custom",
                     "tokenizer": "standard",
                     "filter": [
                         "lowercase",
-                        "stop",
-                        "porter_stem",
-                        "asciifolding"
-                    ]
-                }
-            }
-        }
+                        "asciifolding",
+                        "nlp_synonyms",
+                        "english_stop",
+                        "english_stemmer",
+                    ],
+                },
+                "trigram_analyzer": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "filter": [
+                        "lowercase",
+                        "asciifolding",
+                        "trigram_shingle",
+                    ],
+                },
+                "suggest_query_analyzer": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "filter": [
+                        "lowercase",
+                        "asciifolding",
+                    ],
+                },
+            },
+        },
     },
     "mappings": {
         "properties": {
-            "id":         {"type": "keyword"},
+            "id": {"type": "keyword"},
             "title": {
                 "type": "text",
                 "analyzer": "nlp_analyzer",
                 "fields": {
-                    "keyword": {"type": "keyword"},          # exact match
-                    "suggest": {"type": "search_as_you_type"}  # autocomplete
-                }
+                    "keyword": {"type": "keyword"},
+                    "suggest": {"type": "search_as_you_type"},
+                    "trigram": {
+                        "type": "text",
+                        "analyzer": "trigram_analyzer",
+                        "search_analyzer": "suggest_query_analyzer",
+                    },
+                },
             },
-            "chapter":    {"type": "keyword"},
-            "topic":      {"type": "keyword"},
+            "chapter": {"type": "keyword"},
+            "topic": {"type": "keyword"},
             "difficulty": {"type": "keyword"},
             "concept_type": {"type": "keyword"},
             "content": {
                 "type": "text",
-                "analyzer": "nlp_analyzer"
+                "analyzer": "nlp_analyzer",
+                "fields": {
+                    "trigram": {
+                        "type": "text",
+                        "analyzer": "trigram_analyzer",
+                        "search_analyzer": "suggest_query_analyzer",
+                    }
+                },
             },
-            "snippet":    {"type": "text", "analyzer": "nlp_analyzer"},
-            "tags":       {"type": "keyword"},
-            # Optional: semantic embedding vector (dense_vector)
-            # Uncomment when ENABLE_SEMANTIC_SEARCH=true
-            # "embedding": {
-            #     "type": "dense_vector",
-            #     "dims": 384,
-            #     "index": True,
-            #     "similarity": "cosine"
-            # }
+            "snippet": {
+                "type": "text",
+                "analyzer": "nlp_analyzer",
+            },
+            "tags": {"type": "keyword"},
         }
-    }
+    },
 }
-def get_es_client() -> Elasticsearch:
-    client_kwargs = {
-        "hosts": [settings.es_host],
-        "verify_certs": settings.es_verify_certs,
-        "request_timeout": 30,
-        "retry_on_timeout": True,
-        "max_retries": 3,
-    }
 
-    if settings.es_username and settings.es_password:
-        client_kwargs["basic_auth"] = (settings.es_username, settings.es_password)
 
-    client = Elasticsearch(**client_kwargs)
+def get_index_mapping() -> dict:
+    mapping = deepcopy(BASE_INDEX_MAPPING)
 
-    if not client.ping():
-        raise ConnectionError(
-            "Cannot connect to Elasticsearch. Check if it's running."
-        )
+    if settings.enable_semantic_search:
+        mapping["mappings"]["properties"]["embedding"] = {
+            "type": "dense_vector",
+            "dims": 384,
+            "index": True,
+            "similarity": "cosine",
+        }
 
-    return client
+    return mapping
 
 
 def create_index(es: Elasticsearch, force: bool = False) -> bool:
-    """Create the index with mapping. Use force=True to recreate it."""
+    """Create the index with ES 8.x keyword arguments. Use force=True to recreate it."""
     index = settings.es_index
 
     if es.indices.exists(index=index):
         if force:
             logger.warning("Deleting existing index: %s", index)
-            es.indices.delete(index=index)
+            es.indices.delete(index=index, ignore_unavailable=True)
         else:
             logger.info("Index '%s' already exists. Skipping creation.", index)
             return False
 
-    es.indices.create(index=index, body=INDEX_MAPPING)
+    index_mapping = get_index_mapping()
+    es.indices.create(
+        index=index,
+        settings=index_mapping["settings"],
+        mappings=index_mapping["mappings"],
+    )
     logger.info("Index '%s' created successfully.", index)
     return True
 
 
 def index_documents(
     es: Elasticsearch,
-    data_path: str = "data/textbook.json",
+    data_path: str | None = None,
     force_recreate: bool = False,
 ) -> dict:
     """
@@ -114,23 +167,26 @@ def index_documents(
     """
     create_index(es, force=force_recreate)
 
-    raw_docs = load_json_data(data_path)
-    docs = [preprocess_document(d) for d in raw_docs]
+    resolved_data_path = data_path or settings.dataset_path
+    raw_docs = load_json_data(resolved_data_path)
+    docs = [preprocess_document(document) for document in raw_docs]
 
-    # Add semantic embeddings if enabled
     if settings.enable_semantic_search:
         docs = _add_embeddings(docs)
 
-    # Bulk index
     operations = []
     for doc in docs:
         operations.append({"index": {"_index": settings.es_index, "_id": doc["id"]}})
         operations.append(doc)
 
-    response = es.bulk(operations=operations, refresh=True)
+    response = es.bulk(operations=operations, refresh="wait_for")
 
-    indexed = sum(1 for item in response["items"] if item["index"]["result"] in ("created", "updated"))
-    failed  = sum(1 for item in response["items"] if "error" in item["index"])
+    indexed = sum(
+        1
+        for item in response["items"]
+        if item["index"]["result"] in ("created", "updated")
+    )
+    failed = sum(1 for item in response["items"] if "error" in item["index"])
 
     if failed:
         logger.error("%d documents failed to index.", failed)
@@ -140,15 +196,18 @@ def index_documents(
 
 
 def _add_embeddings(docs: list[dict]) -> list[dict]:
-    """Generate sentence-transformer embeddings and attach to documents."""
+    """Generate sentence-transformer embeddings once and attach them to documents."""
     try:
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer(settings.semantic_model)
-        texts = [f"{d['title']}. {d['content']}" for d in docs]
-        embeddings = model.encode(texts, show_progress_bar=True, batch_size=16)
-        for doc, emb in zip(docs, embeddings):
-            doc["embedding"] = emb.tolist()
-        logger.info("Embeddings generated for %d documents.", len(docs))
+        from elastic.embeddings import encode_documents
     except ImportError:
         logger.warning("sentence-transformers not installed. Skipping embeddings.")
+        return docs
+
+    texts = [f"{doc['title']}. {doc['content']}" for doc in docs]
+    embeddings = encode_documents(texts)
+
+    for doc, embedding in zip(docs, embeddings):
+        doc["embedding"] = embedding
+
+    logger.info("Embeddings generated for %d documents.", len(docs))
     return docs

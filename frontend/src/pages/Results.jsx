@@ -1,72 +1,45 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+
 import Navbar from "../components/Navbar";
 import ResultCard from "../components/ResultCard";
 import SearchBar from "../components/SearchBar";
 import SidebarFilters from "../components/SidebarFilters";
+import {
+  EMPTY_FACETS,
+  FILTER_LABELS,
+  PAGE_SIZE,
+  QUICK_FILTER_LABELS,
+  SEARCH_FILTER_KEYS,
+  SORT_OPTIONS,
+  createEmptyFilters,
+  sanitizeList,
+  sanitizeQuickFilters,
+} from "../constants/search";
 import { getFilters, searchDocuments } from "../services/api";
 
-const PAGE_SIZE = 10;
-const QUICK_FILTER_MAP = {
-  important: { difficulty: ["Advanced"] },
-  trending: { topic: ["Transformers", "Language Models"] },
-  frequent: { concept_type: ["Definition", "Theory"] },
-};
-
-const INITIAL_FILTERS = {
-  chapter: [],
-  topic: [],
-  difficulty: [],
-  concept_type: [],
-  tags: [],
-};
-
-const EMPTY_FACETS = {
-  chapters: [],
-  topics: [],
-  difficulties: [],
-  concept_types: [],
-  tags: [],
-};
-
-const FACET_LABELS = {
-  chapter: "Chapter",
-  topic: "Topics",
-  difficulty: "Difficulty",
-  concept_type: "Concept Type",
-  tags: "Tags",
-};
-
-function filtersReducer(state, action) {
-  switch (action.type) {
-    case "toggle": {
-      const values = state[action.key];
-      const nextValues = values.includes(action.value)
-        ? values.filter((item) => item !== action.value)
-        : [...values, action.value];
-      return { ...state, [action.key]: nextValues };
-    }
-    case "reset":
-      return INITIAL_FILTERS;
-    default:
-      return state;
-  }
+function readPositiveInteger(value, fallback = 1) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function mergeFilters(baseFilters, quickFilters) {
-  const merged = { ...baseFilters };
+function readSort(searchParams) {
+  const sort = searchParams.get("sort");
+  return SORT_OPTIONS.some((option) => option.key === sort) ? sort : "relevance";
+}
 
-  quickFilters.forEach((quickKey) => {
-    const quickConfig = QUICK_FILTER_MAP[quickKey];
-    if (!quickConfig) return;
-
-    Object.entries(quickConfig).forEach(([key, values]) => {
-      merged[key] = Array.from(new Set([...(merged[key] ?? []), ...values]));
-    });
+function readFilters(searchParams) {
+  const nextFilters = createEmptyFilters();
+  SEARCH_FILTER_KEYS.forEach((key) => {
+    nextFilters[key] = sanitizeList(searchParams.getAll(key));
   });
+  return nextFilters;
+}
 
-  return merged;
+function writeListParam(searchParams, key, values) {
+  searchParams.delete(key);
+  values.forEach((value) => searchParams.append(key, value));
 }
 
 function LoadingState() {
@@ -96,7 +69,9 @@ function EmptyState({ hasQuery, onClear }) {
         {hasQuery ? "No results found" : "Start with a search"}
       </h3>
       <p className="text-slate-500 mb-5">
-        {hasQuery ? "Try adjusting the query or clearing a few filters." : "Search concepts, models, and algorithms from the NLP textbook index."}
+        {hasQuery
+          ? "Try adjusting the query, switching sort mode, or clearing a few filters."
+          : "Search concepts, models, and algorithms from the NLP textbook index."}
       </p>
       {hasQuery && (
         <button
@@ -107,6 +82,24 @@ function EmptyState({ hasQuery, onClear }) {
         </button>
       )}
     </Motion.div>
+  );
+}
+
+function DidYouMeanBanner({ suggestion, onSelect }) {
+  if (!suggestion) return null;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-amber-300/15 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+      Did you mean{" "}
+      <button
+        type="button"
+        onClick={() => onSelect(suggestion)}
+        className="font-semibold text-amber-50 underline decoration-amber-200/50 underline-offset-4 hover:text-white"
+      >
+        {suggestion}
+      </button>
+      ?
+    </div>
   );
 }
 
@@ -123,9 +116,14 @@ function ActiveFilterSummary({
   const chips = useMemo(
     () => [
       ...Object.entries(filters).flatMap(([key, values]) =>
-        values.map((value) => ({ type: "facet", key, value, label: FACET_LABELS[key] }))
+        values.map((value) => ({ type: "facet", key, value, label: FILTER_LABELS[key] }))
       ),
-      ...quickFilters.map((key) => ({ type: "quick", key, value: key, label: "Quick" })),
+      ...quickFilters.map((key) => ({
+        type: "quick",
+        key,
+        value: QUICK_FILTER_LABELS[key] ?? key,
+        label: "Quick",
+      })),
     ],
     [filters, quickFilters]
   );
@@ -147,7 +145,7 @@ function ActiveFilterSummary({
             <span className="font-mono-custom text-[10px] uppercase tracking-[0.18em] text-indigo-300/85">
               {chip.label}
             </span>
-            <span className="capitalize">{chip.value.replace(/_/g, " ")}</span>
+            <span>{chip.value}</span>
             <span className="text-indigo-300">x</span>
           </button>
         ))}
@@ -226,162 +224,270 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
 }
 
 export default function Results() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const desktopResultsRef = useRef(null);
   const mobileResultsRef = useRef(null);
 
-  const [filters, dispatch] = useReducer(filtersReducer, INITIAL_FILTERS);
-  const [quickFilters, setQuickFilters] = useState([]);
   const [results, setResults] = useState([]);
   const [facets, setFacets] = useState(EMPTY_FACETS);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [sortBy, setSortBy] = useState("relevance");
+  const [didYouMean, setDidYouMean] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const query = searchParams.get("q")?.trim() || "";
-  const page = Math.max(1, Number(searchParams.get("page") || 1) || 1);
-  const requestFilters = useMemo(() => mergeFilters(filters, quickFilters), [filters, quickFilters]);
+  const query = (searchParams.get("q") ?? "").trim();
+  const page = readPositiveInteger(searchParams.get("page"), 1);
+  const sortBy = readSort(searchParams);
+  const semantic = searchParams.get("semantic") === "1";
+  const filters = useMemo(() => readFilters(searchParams), [searchParams]);
+  const quickFilters = useMemo(() => sanitizeQuickFilters(searchParams.getAll("quick_filter")), [searchParams]);
 
-  const syncRoute = (nextQuery = query, nextPage = page, replace = false) => {
-    const params = new URLSearchParams();
-    if (nextQuery?.trim()) {
-      params.set("q", nextQuery.trim());
-    }
-    if (nextPage > 1) {
-      params.set("page", String(nextPage));
-    }
+  const updateSearchState = useCallback(
+    (mutate, { replace = false } = {}) => {
+      const nextParams = new URLSearchParams(searchParams);
+      mutate(nextParams);
 
-    navigate(
-      {
-        pathname: "/results",
-        search: params.toString() ? `?${params.toString()}` : "",
-      },
-      { replace }
-    );
-  };
+      const nextQuery = (nextParams.get("q") ?? "").trim();
+      if (nextQuery) {
+        nextParams.set("q", nextQuery);
+      } else {
+        nextParams.delete("q");
+      }
+
+      const nextPage = readPositiveInteger(nextParams.get("page"), 1);
+      if (nextPage > 1) {
+        nextParams.set("page", String(nextPage));
+      } else {
+        nextParams.delete("page");
+      }
+
+      if (readSort(nextParams) === "alphabetical") {
+        nextParams.set("sort", "alphabetical");
+      } else {
+        nextParams.delete("sort");
+      }
+
+      if (nextParams.get("semantic") === "1") {
+        nextParams.set("semantic", "1");
+      } else {
+        nextParams.delete("semantic");
+      }
+
+      SEARCH_FILTER_KEYS.forEach((key) => {
+        writeListParam(nextParams, key, sanitizeList(nextParams.getAll(key)));
+      });
+      writeListParam(nextParams, "quick_filter", sanitizeQuickFilters(nextParams.getAll("quick_filter")));
+
+      setSearchParams(nextParams, { replace });
+    },
+    [searchParams, setSearchParams]
+  );
 
   useEffect(() => {
-    let ignore = false;
+    if (!query && page !== 1) {
+      updateSearchState((nextParams) => nextParams.delete("page"), { replace: true });
+    }
+  }, [page, query, updateSearchState]);
 
-    async function loadResults() {
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load() {
+      setError("");
+      setDidYouMean("");
+
       if (!query) {
+        setLoading(false);
         setResults([]);
         setTotal(0);
         setTotalPages(1);
-        setError("");
+
+        try {
+          const data = await getFilters({
+            ...filters,
+            quick_filter: quickFilters,
+            signal: controller.signal,
+          });
+
+          if (!controller.signal.aborted) {
+            setFacets(data ?? EMPTY_FACETS);
+          }
+        } catch (fetchError) {
+          if (!controller.signal.aborted && fetchError?.name !== "AbortError") {
+            setFacets(EMPTY_FACETS);
+          }
+        }
+
         return;
       }
 
       setLoading(true);
-      setError("");
 
       try {
         const data = await searchDocuments(query, {
-          ...requestFilters,
+          ...filters,
+          quick_filter: quickFilters,
           size: PAGE_SIZE,
           page,
+          semantic,
+          sort: sortBy,
+          signal: controller.signal,
         });
 
-        if (!ignore) {
-          setResults(data.results ?? []);
-          setTotal(data.total ?? 0);
-          setTotalPages(data.total_pages ?? 1);
-          setFacets(data.facets ?? EMPTY_FACETS);
+        if (controller.signal.aborted) {
+          return;
         }
-      } catch (err) {
-        if (!ignore) {
-          setError(err.message || "Failed to fetch results.");
-          setResults([]);
-          setTotal(0);
-          setTotalPages(1);
+
+        const nextTotalPages = Math.max(1, readPositiveInteger(`${data.total_pages ?? 1}`, 1));
+        if (page > nextTotalPages) {
+          setDidYouMean(data.did_you_mean ?? "");
+          updateSearchState(
+            (nextParams) => {
+              if (nextTotalPages > 1) {
+                nextParams.set("page", String(nextTotalPages));
+              } else {
+                nextParams.delete("page");
+              }
+            },
+            { replace: true }
+          );
+          return;
         }
+
+        setResults(Array.isArray(data.results) ? data.results : []);
+        setTotal(Number(data.total ?? 0));
+        setTotalPages(nextTotalPages);
+        setFacets(data.facets ?? EMPTY_FACETS);
+        setDidYouMean(data.did_you_mean ?? "");
+      } catch (fetchError) {
+        if (controller.signal.aborted || fetchError?.name === "AbortError") {
+          return;
+        }
+
+        setError(fetchError.message || "Failed to fetch results.");
+        setResults([]);
+        setTotal(0);
+        setTotalPages(1);
+        setDidYouMean("");
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       }
     }
 
-    loadResults();
+    load();
 
-    return () => {
-      ignore = true;
-    };
-  }, [page, query, requestFilters]);
-
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadFacetCatalog() {
-      try {
-        const data = await getFilters({ q: query, ...requestFilters });
-        if (!ignore) {
-          setFacets(data);
-        }
-      } catch {
-        if (!ignore) {
-          setFacets((current) => current ?? EMPTY_FACETS);
-        }
-      }
-    }
-
-    loadFacetCatalog();
-
-    return () => {
-      ignore = true;
-    };
-  }, [query, requestFilters]);
+    return () => controller.abort();
+  }, [filters, page, query, quickFilters, semantic, sortBy, updateSearchState]);
 
   useEffect(() => {
     desktopResultsRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     mobileResultsRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [page, query, requestFilters, sortBy]);
+  }, [filters, page, query, quickFilters, semantic, sortBy]);
 
-  const handleSearch = (newQuery) => {
-    if (newQuery.trim()) {
-      syncRoute(newQuery, 1);
-    }
-  };
+  const handleSearch = useCallback(
+    (nextQuery) => {
+      const trimmed = nextQuery.trim();
+      if (!trimmed) return;
 
-  const toggleFilter = (key, value) => {
-    if (page !== 1) {
-      syncRoute(query, 1, true);
-    }
-    dispatch({ type: "toggle", key, value });
-  };
+      updateSearchState((nextParams) => {
+        nextParams.set("q", trimmed);
+        nextParams.delete("page");
+      });
+    },
+    [updateSearchState]
+  );
 
-  const toggleQuickFilter = (key) => {
-    if (page !== 1) {
-      syncRoute(query, 1, true);
-    }
-    setQuickFilters((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
-  };
+  const toggleFilter = useCallback(
+    (key, value) => {
+      updateSearchState((nextParams) => {
+        const currentValues = sanitizeList(nextParams.getAll(key));
+        const normalizedValue = value.trim().toLowerCase();
+        const nextValues = currentValues.some((entry) => entry.toLowerCase() === normalizedValue)
+          ? currentValues.filter((entry) => entry.toLowerCase() !== normalizedValue)
+          : [...currentValues, value];
 
-  const clearFilters = () => {
-    if (page !== 1) {
-      syncRoute(query, 1, true);
-    }
-    setQuickFilters([]);
-    dispatch({ type: "reset" });
-  };
+        writeListParam(nextParams, key, nextValues);
+        nextParams.delete("page");
+      }, { replace: true });
+    },
+    [updateSearchState]
+  );
 
-  const handlePageChange = (nextPage) => {
-    if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
-    syncRoute(query, nextPage);
-  };
+  const toggleQuickFilter = useCallback(
+    (key) => {
+      updateSearchState((nextParams) => {
+        const currentValues = sanitizeQuickFilters(nextParams.getAll("quick_filter"));
+        const nextValues = currentValues.includes(key)
+          ? currentValues.filter((entry) => entry !== key)
+          : [...currentValues, key];
 
-  const sortedData = useMemo(() => {
-    const nextData = [...results];
-    if (sortBy === "alphabetical") {
-      return nextData.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-    }
-    return nextData.sort((a, b) => (b.score || 0) - (a.score || 0));
-  }, [results, sortBy]);
+        writeListParam(nextParams, "quick_filter", nextValues);
+        nextParams.delete("page");
+      }, { replace: true });
+    },
+    [updateSearchState]
+  );
+
+  const clearFilters = useCallback(() => {
+    updateSearchState((nextParams) => {
+      SEARCH_FILTER_KEYS.forEach((key) => nextParams.delete(key));
+      nextParams.delete("quick_filter");
+      nextParams.delete("page");
+    }, { replace: true });
+  }, [updateSearchState]);
+
+  const handleTagClick = useCallback(
+    (tag) => {
+      toggleFilter("tags", tag);
+    },
+    [toggleFilter]
+  );
+
+  const handlePageChange = useCallback(
+    (nextPage) => {
+      if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
+
+      updateSearchState((nextParams) => {
+        if (nextPage > 1) {
+          nextParams.set("page", String(nextPage));
+        } else {
+          nextParams.delete("page");
+        }
+      });
+    },
+    [page, totalPages, updateSearchState]
+  );
+
+  const handleSortChange = useCallback(
+    (nextSort) => {
+      updateSearchState((nextParams) => {
+        if (nextSort === "alphabetical") {
+          nextParams.set("sort", "alphabetical");
+        } else {
+          nextParams.delete("sort");
+        }
+        nextParams.delete("page");
+      }, { replace: true });
+    },
+    [updateSearchState]
+  );
+
+  const toggleSemantic = useCallback(() => {
+    updateSearchState((nextParams) => {
+      if (nextParams.get("semantic") === "1") {
+        nextParams.delete("semantic");
+      } else {
+        nextParams.set("semantic", "1");
+      }
+      nextParams.delete("page");
+    }, { replace: true });
+  }, [updateSearchState]);
+
+  const displayedPage = Math.min(page, totalPages);
 
   return (
     <div
@@ -399,71 +505,113 @@ export default function Results() {
 
       <Navbar />
 
-      <div className="pt-[76px] h-full flex flex-col">
-        <div className="relative z-[95] shrink-0 border-b border-white/5 bg-[rgba(6,11,24,0.9)] backdrop-blur-xl">
-          <div className="max-w-[1400px] mx-auto px-6 py-5">
-            <SearchBar onSearch={handleSearch} defaultValue={query} compact />
-          </div>
+      <div className="pt-[76px] h-full flex flex-row w-full overflow-hidden relative z-[95]">
+        
+        {/* Left Sidebar - Fixed to Left Edge */}
+        <div className="hidden lg:block w-[320px] xl:w-[340px] shrink-0 h-full border-r border-white/5 bg-[rgba(6,11,24,0.6)] backdrop-blur-xl overflow-y-auto leading-none z-[90]">
+          <SidebarFilters
+            facets={facets}
+            filters={filters}
+            quickFilters={quickFilters}
+            onToggle={toggleFilter}
+            onToggleQuick={toggleQuickFilter}
+            onClear={clearFilters}
+            loading={loading}
+            className="h-full border-none rounded-none shadow-none text-left"
+          />
         </div>
 
-        <div className="flex-1 min-h-0">
-          <div className="max-w-[1400px] mx-auto px-6 py-6 h-full">
-            <div className="hidden xl:grid grid-cols-[300px_minmax(0,1fr)] gap-6 h-full items-start">
-              <div className="h-full min-h-0">
-                <div className="h-full sticky top-0">
-                  <SidebarFilters
-                    facets={facets}
-                    filters={filters}
-                    quickFilters={quickFilters}
-                    onToggle={toggleFilter}
-                    onToggleQuick={toggleQuickFilter}
-                    onClear={clearFilters}
-                    loading={loading}
-                    className="h-full"
-                  />
-                </div>
-              </div>
+        {/* Right Content Area - Spans Remaining Width */}
+        <div className="flex-1 flex flex-col min-w-0 h-full bg-transparent">
+          
+          {/* Header Panel — overflow-visible + high z-index so dropdown floats above results */}
+          <div className="shrink-0 border-b border-white/5 bg-[rgba(6,11,24,0.9)] backdrop-blur-xl px-4 sm:px-6 lg:px-10 py-5 w-full overflow-visible z-[60] relative">
+            <div className="max-w-[1000px] relative">
+              <SearchBar onSearch={handleSearch} defaultValue={query} compact centered={false} />
+            </div>
+          </div>
 
-              <div ref={desktopResultsRef} className="min-w-0 h-full overflow-y-auto custom-scrollbar pr-1">
-                <div className="pb-4">
+          <div className="flex-1 flex flex-row min-h-0 overflow-hidden relative">
+            
+            {/* Results Column (Desktop + Mobile) */}
+            <div className="flex-1 flex flex-col min-w-0">
+              
+              {/* Desktop Scroll Pane */}
+              <div ref={desktopResultsRef} className="hidden lg:block flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-6 lg:px-10 pt-8 pb-20">
+                <div className="max-w-[1000px]">
                   <Motion.div
                     initial={{ opacity: 0, y: -12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4 }}
-                    className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between mb-6"
+                    className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between mb-8"
                   >
                     <div>
-                      <h2 className="text-2xl font-semibold text-white" style={{ fontFamily: "Sora, sans-serif" }}>
-                        Results for <span className="gradient-text">"{query || "All Concepts"}"</span>
+                      {/* Desktop Breadcrumbs */}
+                      <nav aria-label="Breadcrumb" className="mb-3">
+                        <ol className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
+                          <li>
+                            <Link to="/" className="hover:text-indigo-300 transition-colors duration-200">Home</Link>
+                          </li>
+                          <li><span className="text-white/20 select-none">/</span></li>
+                          <li>
+                            <span className="text-slate-400 select-none">Results</span>
+                          </li>
+                          {query && (
+                            <>
+                              <li><span className="text-white/20 select-none">/</span></li>
+                              <li>
+                                <span className="text-indigo-200/80 truncate max-w-[200px] inline-block align-bottom">{`"${query}"`}</span>
+                              </li>
+                            </>
+                          )}
+                        </ol>
+                      </nav>
+
+                      <h2 className="text-2xl lg:text-[26px] font-semibold text-white tracking-tight" style={{ fontFamily: "Sora, sans-serif" }}>
+                        Results for <span className="gradient-text tracking-normal">"{query || "All Concepts"}"</span>
                       </h2>
-                      <p className="text-xs text-slate-500 mt-2 font-mono-custom">
-                        {total} results | page {page} of {totalPages} | {PAGE_SIZE} per page
+                      <p className="text-[13px] text-slate-500 mt-2 font-mono-custom tracking-wide">
+                        {total} results | page {displayedPage} of {totalPages}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-slate-600">Sort by:</span>
-                      {["relevance", "alphabetical"].map((option) => (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold mr-1">Sort by:</span>
+                      {SORT_OPTIONS.map((option) => (
                         <button
-                          key={option}
-                          onClick={() => setSortBy(option)}
-                          className={`text-xs px-3 py-1.5 rounded-lg transition-all duration-200 capitalize font-mono-custom ${
-                            sortBy === option
-                              ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                              : "text-slate-500 hover:text-slate-300 border border-transparent hover:border-white/10"
+                          key={option.key}
+                          onClick={() => handleSortChange(option.key)}
+                          className={`text-xs px-3.5 py-2 rounded-xl transition-all duration-200 capitalize font-medium ${
+                            sortBy === option.key
+                              ? "bg-indigo-500/15 text-indigo-200 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
                           }`}
                         >
-                          {option}
+                          {option.label}
                         </button>
                       ))}
+                      <div className="w-px h-5 bg-white/10 mx-1" />
+                      <button
+                        type="button"
+                        onClick={toggleSemantic}
+                        className={`text-xs px-3.5 py-2 rounded-xl transition-all duration-200 font-medium ${
+                          semantic
+                            ? "bg-sky-500/15 text-sky-200 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.25)]"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                        }`}
+                      >
+                        Semantic {semantic ? "On" : "Off"}
+                      </button>
                     </div>
                   </Motion.div>
 
                   {error && (
-                    <div className="mb-6 rounded-2xl border border-red-400/15 bg-red-500/8 px-4 py-3 text-sm text-red-200">
+                    <div className="mb-8 rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-[14px] text-red-200 shadow-sm">
                       {error}
                     </div>
                   )}
+
+                  {!error && <DidYouMeanBanner suggestion={didYouMean} onSelect={handleSearch} />}
 
                   <ActiveFilterSummary
                     filters={filters}
@@ -472,23 +620,30 @@ export default function Results() {
                     onToggleQuick={toggleQuickFilter}
                     onClear={clearFilters}
                     total={total}
-                    page={page}
+                    page={displayedPage}
                     totalPages={totalPages}
                   />
 
                   {loading ? (
                     <LoadingState />
-                  ) : sortedData.length > 0 ? (
+                  ) : results.length > 0 ? (
                     <AnimatePresence mode="wait">
                       <Motion.div
-                        key={`${query}-${sortBy}-${page}`}
+                        key={`${query}-${sortBy}-${page}-${semantic ? "semantic" : "keyword"}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -8 }}
                         transition={{ duration: 0.25 }}
+                        className="space-y-5"
                       >
-                        {sortedData.map((item, index) => (
-                          <ResultCard key={item.id || item.title} item={item} query={query} index={index} />
+                        {results.map((item, index) => (
+                          <ResultCard
+                            key={item.id || item.title}
+                            item={item}
+                            query={query}
+                            index={(displayedPage - 1) * PAGE_SIZE + index}
+                            onTagClick={handleTagClick}
+                          />
                         ))}
                       </Motion.div>
                     </AnimatePresence>
@@ -496,99 +651,88 @@ export default function Results() {
                     <EmptyState hasQuery={Boolean(query)} onClear={clearFilters} />
                   )}
 
-                  {!loading && sortedData.length > 0 && (
-                    <Pagination currentPage={page} totalPages={totalPages} onPageChange={handlePageChange} />
+                  {!loading && results.length > 0 && (
+                    <Pagination currentPage={displayedPage} totalPages={totalPages} onPageChange={handlePageChange} />
                   )}
                 </div>
               </div>
-            </div>
 
-            <div ref={mobileResultsRef} className="xl:hidden h-full overflow-y-auto pr-1 custom-scrollbar">
-              <Motion.div
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="flex flex-col gap-4 mb-6"
-              >
-                <div>
-                  <h2 className="text-2xl font-semibold text-white" style={{ fontFamily: "Sora, sans-serif" }}>
-                    Results for <span className="gradient-text">"{query || "All Concepts"}"</span>
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-2 font-mono-custom">
-                    {total} results | page {page} of {totalPages} | {PAGE_SIZE} per page
-                  </p>
-                </div>
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <button
-                    onClick={() => setMobileFiltersOpen(true)}
-                    className="px-4 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] text-sm text-slate-200 hover:border-indigo-400/20 hover:text-white transition-colors"
-                  >
-                    Open Filters
-                  </button>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-slate-600">Sort by:</span>
-                    {["relevance", "alphabetical"].map((option) => (
-                      <button
-                        key={option}
-                        onClick={() => setSortBy(option)}
-                        className={`text-xs px-3 py-1.5 rounded-lg transition-all duration-200 capitalize font-mono-custom ${
-                          sortBy === option
-                            ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                            : "text-slate-500 hover:text-slate-300 border border-transparent hover:border-white/10"
-                        }`}
-                      >
-                        {option}
-                      </button>
-                    ))}
+              {/* Mobile Scroll Pane */}
+              <div ref={mobileResultsRef} className="lg:hidden flex-1 overflow-y-auto px-4 pt-6 pb-20 custom-scrollbar">
+                <Motion.div
+                  initial={{ opacity: 0, y: -12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="flex flex-col gap-5 mb-8"
+                >
+                  <div>
+                    <h2 className="text-2xl font-semibold text-white tracking-tight" style={{ fontFamily: "Sora, sans-serif" }}>
+                      Results for <span className="gradient-text tracking-normal">"{query || "All Concepts"}"</span>
+                    </h2>
+                    <p className="text-[13px] text-slate-500 mt-2 font-mono-custom tracking-wide">
+                      {total} results | page {displayedPage} of {totalPages}
+                    </p>
+                    <button
+                      onClick={() => setMobileFiltersOpen(true)}
+                      className="w-full mt-4 px-5 py-3 rounded-xl border border-white/10 bg-white/[0.04] text-[14px] font-medium text-slate-200 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                      </svg>
+                      Filters & Refine
+                    </button>
                   </div>
-                </div>
-              </Motion.div>
+                </Motion.div>
 
-              {error && (
-                <div className="mb-6 rounded-2xl border border-red-400/15 bg-red-500/8 px-4 py-3 text-sm text-red-200">
-                  {error}
-                </div>
-              )}
+                {error && <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/8 px-4 py-3 text-sm text-red-200">{error}</div>}
+                {!error && <DidYouMeanBanner suggestion={didYouMean} onSelect={handleSearch} />}
 
-              <ActiveFilterSummary
-                filters={filters}
-                quickFilters={quickFilters}
-                onRemove={toggleFilter}
-                onToggleQuick={toggleQuickFilter}
-                onClear={clearFilters}
-                total={total}
-                page={page}
-                totalPages={totalPages}
-              />
+                <ActiveFilterSummary
+                  filters={filters}
+                  quickFilters={quickFilters}
+                  onRemove={toggleFilter}
+                  onToggleQuick={toggleQuickFilter}
+                  onClear={clearFilters}
+                  total={total}
+                  page={displayedPage}
+                  totalPages={totalPages}
+                />
 
-              {loading ? (
-                <LoadingState />
-              ) : sortedData.length > 0 ? (
-                <AnimatePresence mode="wait">
-                  <Motion.div
-                    key={`${query}-${sortBy}-${page}-mobile`}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    {sortedData.map((item, index) => (
-                      <ResultCard key={item.id || item.title} item={item} query={query} index={index} />
-                    ))}
-                  </Motion.div>
-                </AnimatePresence>
-              ) : (
-                <EmptyState hasQuery={Boolean(query)} onClear={clearFilters} />
-              )}
+                {loading ? (
+                  <LoadingState />
+                ) : results.length > 0 ? (
+                  <AnimatePresence mode="wait">
+                    <Motion.div
+                      key={`${query}-${sortBy}-${page}-${semantic ? 'semantic' : 'keyword'}-mobile`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.25 }}
+                      className="space-y-4"
+                    >
+                      {results.map((item, index) => (
+                        <ResultCard
+                          key={item.id || item.title}
+                          item={item}
+                          query={query}
+                          index={(displayedPage - 1) * PAGE_SIZE + index}
+                          onTagClick={handleTagClick}
+                        />
+                      ))}
+                    </Motion.div>
+                  </AnimatePresence>
+                ) : (
+                  <EmptyState hasQuery={Boolean(query)} onClear={clearFilters} />
+                )}
 
-              {!loading && sortedData.length > 0 && (
-                <Pagination currentPage={page} totalPages={totalPages} onPageChange={handlePageChange} />
-              )}
+                {!loading && results.length > 0 && (
+                  <Pagination currentPage={displayedPage} totalPages={totalPages} onPageChange={handlePageChange} />
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
-
       <AnimatePresence>
         {mobileFiltersOpen && (
           <Motion.div

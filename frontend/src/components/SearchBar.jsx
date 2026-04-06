@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { getSuggestions } from "../services/api";
 
-export default function SearchBar({ onSearch, defaultValue = "", compact = false }) {
+export default function SearchBar({ onSearch, defaultValue = "", compact = false, centered = true }) {
   const [query, setQuery] = useState(defaultValue);
   const [focused, setFocused] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -111,8 +111,10 @@ export default function SearchBar({ onSearch, defaultValue = "", compact = false
     onSearch(suggestion);
   };
 
+  const alignmentClass = centered ? "w-full max-w-2xl mx-auto" : "w-full";
+
   return (
-    <div className={`relative isolate w-full max-w-2xl mx-auto ${showSuggestions ? "z-[120]" : "z-20"}`}>
+    <div className={`relative ${alignmentClass} ${showSuggestions ? "z-[200]" : "z-10"}`}>
       <Motion.div
         animate={focused ? "focused" : "idle"}
         variants={{
@@ -142,6 +144,7 @@ export default function SearchBar({ onSearch, defaultValue = "", compact = false
         </div>
 
         <input
+          id="search-input"
           ref={inputRef}
           type="text"
           value={query}

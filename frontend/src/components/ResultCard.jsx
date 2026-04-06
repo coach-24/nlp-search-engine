@@ -1,18 +1,24 @@
+import { memo } from "react";
 import { motion as Motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
+
 import Tag from "./Tag";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function highlightText(text = "", query) {
   if (!query || query.trim() === "") return text;
 
   try {
     const normalizedQuery = query.trim();
-    const regex = new RegExp(`(${normalizedQuery})`, "gi");
+    const regex = new RegExp(`(${escapeRegExp(normalizedQuery)})`, "gi");
     const parts = text.split(regex);
 
-    return parts.map((part, i) =>
+    return parts.map((part, index) =>
       part.toLowerCase() === normalizedQuery.toLowerCase() ? (
-        <mark key={i} className="keyword-highlight" style={{ background: "none" }}>
+        <mark key={index} className="keyword-highlight" style={{ background: "none" }}>
           {part}
         </mark>
       ) : (
@@ -24,9 +30,10 @@ function highlightText(text = "", query) {
   }
 }
 
-export default function ResultCard({ item, query, index = 0 }) {
+function ResultCardComponent({ item, query, index = 0, onTagClick }) {
   const navigate = useNavigate();
   const location = useLocation();
+
   const detailId = item?.id ?? item?._id ?? item?.doc_id;
   const snippetHtml = item?.snippet ?? "";
 
@@ -40,14 +47,14 @@ export default function ResultCard({ item, query, index = 0 }) {
 
   return (
     <Motion.div
-      initial={{ opacity: 0, y: 24, scale: 0.96 }}
+      initial={{ opacity: 0, y: 24, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      whileHover={{ y: -6, scale: 1.005 }}
-      transition={{ duration: 0.45, delay: index * 0.08, ease: [0.4, 0, 0.2, 1] }}
-      className="glass-card rounded-2xl p-6 card-hover group relative overflow-hidden mb-4"
+      whileHover={{ y: -4, scale: 1.005 }}
+      transition={{ duration: 0.45, delay: index * 0.06, ease: [0.16, 1, 0.3, 1] }}
+      className="glass-card rounded-2xl p-7 2xl:p-8 card-hover group relative overflow-hidden mb-5 bg-white/[0.02] border border-white/[0.05]"
       style={{
         boxShadow:
-          "0 18px 40px rgba(3, 7, 18, 0.42), 0 0 0 1px rgba(255,255,255,0.04) inset",
+          "0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.03) inset",
       }}
     >
       <div
@@ -108,7 +115,7 @@ export default function ResultCard({ item, query, index = 0 }) {
       </div>
 
       <h3
-        className="text-lg font-semibold text-white mb-2 leading-snug"
+        className="text-xl font-semibold text-white mb-2.5 leading-snug tracking-tight"
         style={{ fontFamily: "Sora, sans-serif" }}
       >
         <span className="group-hover:bg-gradient-to-r group-hover:from-indigo-300 group-hover:to-violet-300 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
@@ -117,25 +124,25 @@ export default function ResultCard({ item, query, index = 0 }) {
       </h3>
 
       <div
-        className="result-snippet overflow-hidden text-slate-400 text-sm leading-relaxed mb-4"
+        className="result-snippet overflow-hidden text-slate-300 text-sm leading-[1.7] mb-5"
         dangerouslySetInnerHTML={{ __html: snippetHtml }}
       />
 
-      <div className="flex gap-2 flex-wrap mb-5">
-        {(item?.tags ?? []).map((tag, i) => (
-          <Tag key={i} label={tag} />
+      <div className="flex gap-3 flex-wrap mb-6">
+        {(item?.tags ?? []).map((tag, tagIndex) => (
+          <Tag key={`${tag}-${tagIndex}`} label={tag} onClick={onTagClick} />
         ))}
       </div>
 
-      <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+      <div className="flex items-center gap-3 pt-5 border-t border-white/5">
         <Motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           onClick={handleView}
           disabled={!detailId}
-          className="btn-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary text-white h-10 px-5 rounded-xl text-[14px] font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all duration-300"
         >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -152,26 +159,6 @@ export default function ResultCard({ item, query, index = 0 }) {
           View
         </Motion.button>
 
-        <Motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="text-sm px-4 py-1.5 rounded-lg font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-2"
-          style={{
-            background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-            />
-          </svg>
-          Explain
-        </Motion.button>
-
         <div className="flex-1" />
 
         <span className="text-xs text-slate-600 font-mono-custom">
@@ -181,3 +168,5 @@ export default function ResultCard({ item, query, index = 0 }) {
     </Motion.div>
   );
 }
+
+export default memo(ResultCardComponent);

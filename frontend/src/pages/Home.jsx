@@ -14,31 +14,6 @@ const FEATURED_TAGS = [
   "Attention",
 ];
 
-const CATEGORIES = [
-  {
-    title: "Language Modeling",
-    description: "Explore next-token prediction, perplexity, decoding, and transformer foundations.",
-  },
-  {
-    title: "Syntax & Parsing",
-    description: "Dive into constituency parsing, dependency structure, CKY, and grammar-driven models.",
-  },
-  {
-    title: "Semantics",
-    description: "Trace meaning representations, lexical semantics, retrieval, and contextual embeddings.",
-  },
-  {
-    title: "Information Retrieval",
-    description: "Study ranking, retrieval signals, vector search, and semantic matching patterns.",
-  },
-];
-
-const POPULAR_CONCEPTS = [
-  "Transformer Encoders",
-  "Sequence Labeling",
-  "Question Answering",
-  "Semantic Search",
-];
 
 const STATS = [
   { label: "Indexed documents", value: "425+" },
@@ -57,7 +32,7 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-screen relative overflow-x-hidden"
+      className="h-screen w-screen relative overflow-hidden"
       style={{ background: "linear-gradient(135deg, #060b18 0%, #0a1128 40%, #0e1635 70%, #060b18 100%)" }}
     >
       <Navbar />
@@ -75,9 +50,9 @@ export default function Home() {
         style={{ background: "radial-gradient(circle, rgba(168,85,247,0.10) 0%, transparent 72%)" }}
       />
 
-      <div className="relative z-10">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <section className="min-h-screen flex items-center pt-28 pb-20">
+      <div className="relative z-10 h-full">
+        <div className="max-w-[1200px] mx-auto px-6 h-full">
+          <section className="h-full flex items-center pt-20">
             <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-12">
               <div className="w-full max-w-lg text-center lg:text-left">
                 <Motion.div
@@ -164,55 +139,6 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="space-y-16 pb-24">
-            <div className="grid lg:grid-cols-2 gap-8">
-              <Motion.section
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.45 }}
-                className="glass-card rounded-[2rem] p-6"
-              >
-                <div className="text-xs uppercase tracking-[0.22em] text-slate-500 mb-4">Explore by Category</div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {CATEGORIES.map((category) => (
-                    <button
-                      key={category.title}
-                      onClick={() => handleSearch(category.title)}
-                      className="w-full text-left rounded-2xl border border-white/6 bg-white/[0.02] p-4 hover:border-indigo-400/20 hover:bg-indigo-500/8 transition-all"
-                    >
-                      <div className="text-white font-semibold mb-1">{category.title}</div>
-                      <div className="text-sm text-slate-400 leading-relaxed">{category.description}</div>
-                    </button>
-                  ))}
-                </div>
-              </Motion.section>
-
-              <Motion.section
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.45, delay: 0.08 }}
-                className="glass-card rounded-[2rem] p-6"
-              >
-                <div className="text-xs uppercase tracking-[0.22em] text-slate-500 mb-4">Popular Concepts</div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {POPULAR_CONCEPTS.map((concept) => (
-                    <Motion.button
-                      key={concept}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handleSearch(concept)}
-                      className="rounded-2xl border border-white/6 bg-white/[0.02] p-4 text-left hover:border-indigo-400/20 hover:bg-indigo-500/8 transition-all"
-                    >
-                      <div className="text-white font-medium">{concept}</div>
-                      <div className="text-sm text-slate-500 mt-1">Jump into this concept cluster</div>
-                    </Motion.button>
-                  ))}
-                </div>
-              </Motion.section>
-            </div>
-          </section>
         </div>
       </div>
     </div>

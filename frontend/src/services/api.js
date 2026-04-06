@@ -1,29 +1,47 @@
+// @ts-check
+
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
+/**
+ * @template T
+ * @param {string} endpoint
+ * @param {Record<string, unknown> & { signal?: AbortSignal | null }} [params]
+ * @returns {Promise<T>}
+ */
 async function apiFetch(endpoint, params = {}) {
+  const { signal = null, ...queryParams } = params;
   const url = new URL(`${BASE_URL}${endpoint}`);
 
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== "") {
-      if (Array.isArray(value)) {
-        value.forEach((v) => {
-          if (v !== null && v !== undefined && v !== "") {
-            url.searchParams.append(key, v);
-          }
-        });
-      } else {
-        url.searchParams.set(key, value);
-      }
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") {
+      return;
     }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => {
+        if (entry !== null && entry !== undefined && entry !== "") {
+          url.searchParams.append(key, `${entry}`);
+        }
+      });
+      return;
+    }
+
+    url.searchParams.set(key, `${value}`);
   });
 
   let response;
 
   try {
     response = await fetch(url.toString(), {
-      headers: { "Content-Type": "application/json" },
+      signal,
+      headers: {
+        Accept: "application/json",
+      },
     });
-  } catch {
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw error;
+    }
     throw new Error("Failed to fetch. Check that the API server is running.");
   }
 
@@ -42,9 +60,12 @@ export async function searchDocuments(q, options = {}) {
     difficulty = [],
     concept_type = [],
     tags = [],
+    quick_filter = [],
     size = 10,
     page = 1,
     semantic = false,
+    sort = "relevance",
+    signal = null,
   } = options;
 
   return apiFetch("/search", {
@@ -54,19 +75,22 @@ export async function searchDocuments(q, options = {}) {
     difficulty,
     concept_type,
     tags,
+    quick_filter,
     size,
     page,
     semantic,
+    sort,
+    signal,
   });
 }
 
-export async function getSuggestions(q, size = 6) {
+export async function getSuggestions(q, size = 6, options = {}) {
   if (!q || q.trim().length < 2) return { query: q, suggestions: [] };
-  return apiFetch("/suggest", { q, size });
+  return apiFetch("/suggest", { q, size, signal: options.signal ?? null });
 }
 
-export async function getDocument(id) {
-  return apiFetch(`/document/${encodeURIComponent(id)}`);
+export async function getDocument(id, options = {}) {
+  return apiFetch(`/document/${encodeURIComponent(id)}`, { signal: options.signal ?? null });
 }
 
 export async function getFilters(options = {}) {
@@ -77,11 +101,22 @@ export async function getFilters(options = {}) {
     difficulty = [],
     concept_type = [],
     tags = [],
+    quick_filter = [],
+    signal = null,
   } = options;
 
-  return apiFetch("/filters", { q, chapter, topic, difficulty, concept_type, tags });
+  return apiFetch("/filters", {
+    q,
+    chapter,
+    topic,
+    difficulty,
+    concept_type,
+    tags,
+    quick_filter,
+    signal,
+  });
 }
 
-export async function checkHealth() {
-  return apiFetch("/health");
+export async function checkHealth(options = {}) {
+  return apiFetch("/health", { signal: options.signal ?? null });
 }

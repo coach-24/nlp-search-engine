@@ -1,68 +1,48 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 
-const FACET_LABELS = {
-  chapter: "Chapter",
-  topic: "Topics",
-  difficulty: "Difficulty",
-  concept_type: "Concept Type",
-  tags: "Tags",
-};
+import {
+  FILTER_LABELS,
+  QUICK_FILTER_LABELS,
+  QUICK_FILTER_OPTIONS,
+} from "../constants/search";
 
 const FACET_CONFIG = [
   { key: "chapter", title: "Chapter", sourceKey: "chapters", defaultOpen: true },
-  { key: "topic", title: "Topics", sourceKey: "topics", defaultOpen: true },
-  { key: "difficulty", title: "Difficulty", sourceKey: "difficulties", defaultOpen: true },
-  { key: "concept_type", title: "Concept Type", sourceKey: "concept_types", defaultOpen: true },
+  { key: "topic", title: "Topics", sourceKey: "topics", defaultOpen: false },
+  { key: "difficulty", title: "Difficulty", sourceKey: "difficulties", defaultOpen: false },
+  { key: "concept_type", title: "Concept Type", sourceKey: "concept_types", defaultOpen: false },
   { key: "tags", title: "Tags / Keywords", sourceKey: "tags", defaultOpen: false, limit: 14 },
-];
-
-const QUICK_FILTERS = [
-  {
-    key: "important",
-    label: "Important",
-    description: "Prioritize high-relevance concepts",
-  },
-  {
-    key: "trending",
-    label: "Trending",
-    description: "Focus on hot NLP concept clusters",
-  },
-  {
-    key: "frequent",
-    label: "Frequent",
-    description: "Common recurring ideas in the corpus",
-  },
 ];
 
 function FilterSection({ title, children, defaultOpen = true, count = 0 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="rounded-2xl border border-white/6 bg-white/[0.02] p-3">
+    <div className="w-full mt-6 mb-2 last:mb-0">
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center justify-between w-full group"
+        className="flex items-center justify-between w-full group py-1 cursor-pointer text-left outline-none mb-3"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-[0.22em] group-hover:text-slate-200 transition-colors">
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-bold text-slate-400 group-hover:text-slate-200 uppercase tracking-widest transition-colors font-sans">
             {title}
           </span>
           {count > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] border border-indigo-400/20 bg-indigo-500/10 text-indigo-200 font-mono-custom">
+            <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-500/15 text-purple-300">
               {count}
             </span>
           )}
         </div>
         <Motion.svg
           animate={{ rotate: open ? 0 : -90 }}
-          transition={{ duration: 0.2 }}
-          className="w-3.5 h-3.5 text-slate-600"
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+          className="w-[14px] h-[14px] text-slate-500 group-hover:text-slate-300 transition-colors"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
         </Motion.svg>
       </button>
 
@@ -72,10 +52,10 @@ function FilterSection({ title, children, defaultOpen = true, count = 0 }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24 }}
-            className="overflow-hidden"
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden w-full"
           >
-            <div className="pt-3 space-y-2">{children}</div>
+            <div className="pb-4 space-y-1 w-full flex flex-col">{children}</div>
           </Motion.div>
         )}
       </AnimatePresence>
@@ -83,40 +63,31 @@ function FilterSection({ title, children, defaultOpen = true, count = 0 }) {
   );
 }
 
-function FilterCheckbox({ label, count, checked, onChange }) {
+function FilterRow({ label, count, checked, onChange }) {
   return (
     <Motion.label
-      whileHover={{ x: 2, scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all duration-200 ${
+      whileHover={{ x: 2 }}
+      whileTap={{ scale: 0.98 }}
+      className={`relative flex items-center justify-between w-full px-3 py-2 min-h-[40px] rounded-lg cursor-pointer transition-all duration-200 group ${
         checked
-          ? "bg-indigo-500/12 border-indigo-400/35 shadow-[0_0_0_1px_rgba(129,140,248,0.08),0_10px_20px_rgba(79,70,229,0.12)]"
-          : "bg-white/[0.015] border-white/5 hover:bg-white/[0.03] hover:border-white/10"
+          ? "bg-purple-500/15"
+          : "hover:bg-white/5"
       }`}
     >
       <input type="checkbox" checked={checked} onChange={onChange} className="sr-only" />
-      <div
-        className={`w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0 transition-all duration-200 ${
-          checked ? "bg-indigo-500 border border-indigo-300" : "border border-white/15 bg-white/5"
-        }`}
-      >
-        {checked && (
-          <Motion.svg
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="w-2.5 h-2.5 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-          </Motion.svg>
-        )}
+      <div className="flex items-center gap-3 overflow-hidden">
+        <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full transition-all duration-300 ${
+          checked ? "bg-purple-400 opacity-100 shadow-[0_0_8px_rgba(192,132,252,0.7)]" : "bg-transparent opacity-0 group-hover:bg-white/20 group-hover:opacity-100"
+        }`} />
+        <span className={`text-[13px] truncate transition-colors duration-200 pl-1 ${
+          checked ? "font-semibold text-purple-100" : "text-slate-300 group-hover:text-white"
+        }`}>
+          {label}
+        </span>
       </div>
-      <span className={`text-sm flex-1 transition-colors ${checked ? "text-white" : "text-slate-300"}`}>
-        {label}
+      <span className={`text-[12px] font-mono transition-colors ${checked ? "text-purple-300/90 font-medium" : "text-slate-500"}`}>
+        {count}
       </span>
-      <span className="text-xs font-mono-custom text-slate-500">{count}</span>
     </Motion.label>
   );
 }
@@ -125,9 +96,19 @@ function SelectedChips({ filters, quickFilters, onRemove, onToggleQuick, onClear
   const chips = useMemo(
     () => [
       ...Object.entries(filters).flatMap(([key, values]) =>
-        values.map((value) => ({ type: "facet", key, value, label: FACET_LABELS[key] }))
+        values.map((value) => ({
+          type: "facet",
+          key,
+          value,
+          label: FILTER_LABELS[key],
+        }))
       ),
-      ...quickFilters.map((key) => ({ type: "quick", key, value: key, label: "Quick" })),
+      ...quickFilters.map((key) => ({
+        type: "quick",
+        key,
+        value: key,
+        label: QUICK_FILTER_LABELS[key] ?? key,
+      })),
     ],
     [filters, quickFilters]
   );
@@ -135,31 +116,35 @@ function SelectedChips({ filters, quickFilters, onRemove, onToggleQuick, onClear
   if (chips.length === 0) return null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold text-slate-400 uppercase tracking-[0.22em]">Selected</span>
+    <div className="w-full mb-10 pt-2">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Active Filters</span>
         <button
           onClick={onClear}
-          className="text-xs text-indigo-300 hover:text-indigo-200 transition-colors font-mono-custom"
+          className="text-[11px] font-semibold text-slate-500 hover:text-slate-200 transition-colors uppercase tracking-widest"
         >
           Clear all
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 w-full">
         {chips.map((chip) => (
           <Motion.button
             key={`${chip.type}-${chip.key}-${chip.value}`}
-            whileHover={{ y: -1 }}
+            whileHover={{ x: 2 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => (chip.type === "quick" ? onToggleQuick(chip.key) : onRemove(chip.key, chip.value))}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-400/20 bg-indigo-500/10 text-indigo-100 text-xs"
+            className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all ease-out duration-200 group text-left"
           >
-            <span className="font-mono-custom text-[10px] uppercase tracking-[0.18em] text-indigo-300/85">
-              {chip.label}
-            </span>
-            <span className="capitalize">{chip.value.replace(/_/g, " ")}</span>
-            <span className="text-indigo-300">x</span>
+            <div className="flex items-center gap-2 truncate pr-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300/60 shrink-0">
+                {chip.type === "quick" ? "Q:" : `${chip.label}:`}
+              </span>
+              <span className="text-[13px] font-medium text-purple-50 truncate">{chip.type === "quick" ? chip.label : chip.value}</span>
+            </div>
+            <svg className="w-3.5 h-3.5 text-purple-400/60 group-hover:text-purple-200 shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </Motion.button>
         ))}
       </div>
@@ -185,43 +170,69 @@ export default function SidebarFilters({
       initial={{ opacity: 0, x: -24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className={`w-full xl:w-[300px] xl:max-w-[300px] ${className}`}
+      className={`relative w-full h-full border-r border-white/5 bg-[#0a0a0b]/60 backdrop-blur-2xl ${className}`}
     >
-      <div className="glass-card rounded-3xl border border-white/8 p-5 h-full overflow-hidden">
-        <div className="h-full flex flex-col">
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div>
-              <h2 className="font-semibold text-white text-base" style={{ fontFamily: "Sora, sans-serif" }}>
-                Refine Search
-              </h2>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Faceted filters for chapters, topics, concepts, and keyword slices.
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-xs font-mono-custom text-indigo-300">{activeCount} active</div>
-            </div>
-          </div>
+      {/* Structural subtle inner depth/glow */}
+      <div className="absolute inset-0 z-0 pointer-events-none bg-gradient-to-b from-white/[0.03] to-transparent shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] opacity-60" />
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar" style={{ scrollBehavior: "smooth" }}>
-            <div className="rounded-2xl border border-white/6 bg-white/[0.02] p-4">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-[0.22em] mb-3">
-                Quick Filters
+      <div className="relative z-10 h-full flex flex-col w-full">
+        
+        {/* Header Block */}
+        <div className="flex flex-col w-full px-6 pt-8 pb-7">
+          <div className="flex items-center justify-between w-full">
+            <h2 className="font-semibold text-white text-xl tracking-tight" style={{ fontFamily: "Inter, sans-serif" }}>
+              Refine Search
+            </h2>
+            {activeCount > 0 && (
+              <Motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-[11px] font-bold bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30"
+              >
+                {activeCount}
+              </Motion.div>
+            )}
+          </div>
+          <p className="text-[14px] text-slate-400 mt-2.5 leading-relaxed">
+            Filter by chapters, topics, concepts, and keys.
+          </p>
+        </div>
+
+        {/* Subtle separator */}
+        <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+        {/* Scrollable Content Container */}
+        <div className="flex-1 overflow-y-auto w-full custom-scrollbar" style={{ scrollBehavior: "smooth" }}>
+          
+          {/* Inner Content Block */}
+          <div className="flex flex-col w-full h-full px-6 py-8 pb-20">
+            
+            <SelectedChips
+              filters={filters}
+              quickFilters={quickFilters}
+              onRemove={onToggle}
+              onToggleQuick={onToggleQuick}
+              onClear={onClear}
+            />
+
+            <div className="w-full mt-2 mb-10">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Quick Filters</span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {QUICK_FILTERS.map((quickFilter) => {
+              <div className="grid grid-cols-2 gap-2.5 w-full">
+                {QUICK_FILTER_OPTIONS.map((quickFilter) => {
                   const active = quickFilters.includes(quickFilter.key);
                   return (
                     <Motion.button
                       key={quickFilter.key}
-                      whileHover={{ y: -1, scale: 1.03 }}
+                      whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => onToggleQuick(quickFilter.key)}
                       title={quickFilter.description}
-                      className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                      className={`flex items-center justify-center w-full px-3 py-2.5 rounded-lg text-[12px] font-medium transition-all duration-200 ease-out border ${
                         active
-                          ? "bg-indigo-500/18 border-indigo-400/30 text-indigo-100"
-                          : "bg-white/[0.03] border-white/8 text-slate-400 hover:text-white hover:border-indigo-400/20"
+                          ? "bg-purple-500/20 border-purple-500/30 text-purple-200 shadow-sm"
+                          : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                       }`}
                     >
                       {quickFilter.label}
@@ -231,15 +242,7 @@ export default function SidebarFilters({
               </div>
             </div>
 
-            <SelectedChips
-              filters={filters}
-              quickFilters={quickFilters}
-              onRemove={onToggle}
-              onToggleQuick={onToggleQuick}
-              onClear={onClear}
-            />
-
-            <div className="space-y-3">
+            <div className="flex flex-col w-full space-y-2">
               {FACET_CONFIG.map((section) => {
                 const items = (facets?.[section.sourceKey] ?? []).slice(0, section.limit ?? Infinity);
 
@@ -252,7 +255,7 @@ export default function SidebarFilters({
                   >
                     {items.length > 0 ? (
                       items.map((item) => (
-                        <FilterCheckbox
+                        <FilterRow
                           key={`${section.key}-${item.value}`}
                           label={item.value}
                           count={item.count}
@@ -261,8 +264,8 @@ export default function SidebarFilters({
                         />
                       ))
                     ) : (
-                      <div className="px-3 py-3 rounded-xl border border-white/5 bg-white/[0.015] text-sm text-slate-500">
-                        {loading ? "Loading filters..." : "No filter values available"}
+                      <div className="px-3 py-2 text-[12px] text-slate-500 italic">
+                        {loading ? "Loading filters..." : "No values"}
                       </div>
                     )}
                   </FilterSection>
@@ -271,24 +274,8 @@ export default function SidebarFilters({
             </div>
           </div>
 
-          <AnimatePresence>
-            {activeCount > 0 && (
-              <Motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                className="pt-4 mt-4 border-t border-white/5"
-              >
-                <button
-                  onClick={onClear}
-                  className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all btn-primary"
-                >
-                  Clear All Filters
-                </button>
-              </Motion.div>
-            )}
-          </AnimatePresence>
         </div>
+
       </div>
     </Motion.aside>
   );

@@ -4,14 +4,18 @@ FastAPI application entry point for the NLP Search Engine backend.
 """
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from elastic.client import close_es_client, get_es_client
+from elastic.index import index_documents
+from routers.ai import router as ai_router
+from routers.explain import router as explain_router
 from routers.search import router as search_router
 from utils.config import settings
 
-# ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -20,60 +24,73 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     On startup:
       1. Connect to Elasticsearch.
-      2. If the index is empty AND data/textbook.json exists → index it.
-      3. If data/textbook.json is missing → log a warning with instructions.
-         (User must run: python ingest.py --pdf ed3book.pdf)
+      2. Warm the semantic model if enabled.
+      3. If the index is missing and a dataset exists, auto-index it.
     """
-    from pathlib import Path
-    from elastic.index import get_es_client, index_documents
-
     try:
         es = get_es_client()
         logger.info("Connected to Elasticsearch at %s", settings.es_host)
 
+        if settings.enable_semantic_search:
+            try:
+                from elastic.embeddings import warm_embedding_model
+
+                warm_embedding_model()
+                logger.info("Semantic model '%s' warmed successfully.", settings.semantic_model)
+            except ImportError:
+                logger.warning(
+                    "Semantic search is enabled but sentence-transformers is unavailable. "
+                    "Keyword search will continue to work."
+                )
+
+        dataset_path = Path(settings.dataset_path)
+
         if not es.indices.exists(index=settings.es_index):
-            data_file = Path("data/textbook.json")
-            if data_file.exists():
-                logger.info("Index missing. Auto-indexing from %s ...", data_file)
-                result = index_documents(es, data_path=str(data_file), force_recreate=False)
+            if dataset_path.exists():
+                logger.info("Index missing. Auto-indexing from %s ...", dataset_path)
+                result = index_documents(es, data_path=str(dataset_path), force_recreate=False)
                 logger.info("Auto-index done: %d indexed, %d failed.", result["indexed"], result["failed"])
             else:
                 logger.warning(
-                    "No index and no dataset found. "
-                    "Run:  python ingest.py --pdf path/to/ed3book.pdf  to build and index the dataset."
+                    "No index and no dataset found at %s. "
+                    "Run: python ingest.py --pdf path/to/ed3book.pdf to build and index the dataset.",
+                    dataset_path,
                 )
         else:
             count = es.count(index=settings.es_index)["count"]
             logger.info("Index '%s' ready with %d documents.", settings.es_index, count)
 
-    except ConnectionError as e:
-        logger.error("Elasticsearch not reachable: %s", e)
-        logger.error("Start ES:  docker run -p 9200:9200 -e discovery.type=single-node "
-                     "-e xpack.security.enabled=false elasticsearch:8.13.0")
-    yield
-    logger.info("Shutting down NLP Search Engine backend.")
+    except ConnectionError as exc:
+        logger.error("Elasticsearch not reachable: %s", exc)
+        logger.error(
+            "Start ES: docker run -p 9200:9200 -e discovery.type=single-node "
+            "-e xpack.security.enabled=false elasticsearch:8.13.0"
+        )
+
+    try:
+        yield
+    finally:
+        close_es_client()
+        logger.info("Shutting down NLP Search Engine backend.")
 
 
-# ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="NLP Search Engine API",
     description=(
         "Backend for searching Jurafsky & Manning 'Speech and Language Processing' textbook. "
         "Supports full-text search, fuzzy matching, filtering, autocomplete, and optional semantic search."
     ),
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -88,15 +105,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routes ────────────────────────────────────────────────────────────────────
 app.include_router(search_router, prefix="/api")
+app.include_router(explain_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")
 
 
 @app.get("/", tags=["Root"])
 async def root():
     return {
-        "name":    "NLP Search Engine",
-        "version": "1.0.0",
-        "docs":    "/docs",
-        "health":  "/api/health",
+        "name": "NLP Search Engine",
+        "version": "1.1.0",
+        "docs": "/docs",
+        "health": "/api/health",
     }

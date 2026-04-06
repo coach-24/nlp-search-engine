@@ -10,7 +10,11 @@ class SearchRequest(BaseModel):
     difficulty: Optional[list[str]] = Field(None, description="Filter by one or more difficulty levels")
     concept_type: Optional[list[str]] = Field(None, description="Filter by one or more concept types")
     tags: Optional[list[str]] = Field(None, description="Filter by one or more tags")
+    quick_filter: Optional[list[str]] = Field(None, description="Quick filter presets")
     size: int = Field(10, ge=1, le=50, description="Number of results to return")
+    page: int = Field(1, ge=1, description="Page number")
+    sort: str = Field("relevance", description="Sort mode")
+    semantic: bool = Field(False, description="Enable semantic search")
     from_: int = Field(0, ge=0, alias="from", description="Pagination offset")
 
     class Config:
@@ -40,6 +44,7 @@ class DocumentResult(BaseModel):
     snippet: str
     tags: list[str]
     score: float
+    matched_signals: list[str] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
@@ -50,6 +55,8 @@ class SearchResponse(BaseModel):
     results: list[DocumentResult]
     facets: SearchFacets
     took_ms: int
+    did_you_mean: str | None = None
+    sort: str = "relevance"
 
 
 class DocumentDetail(BaseModel):
